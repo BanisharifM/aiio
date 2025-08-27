@@ -1,4 +1,5 @@
 #!/bin/bash -l
+echo "Parser script started..."
 
 # AIIO Copyright (c) 2023, The Regents of the University of California,
 # through Lawrence Berkeley National Laboratory (subject to receipt of
@@ -108,3 +109,4 @@ done < "$file_name_list"
 echo "Done with $output_file"
 #rm  -rf ${tmp_dir}
 
+echo "Done parsing"
