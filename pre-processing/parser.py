@@ -42,7 +42,7 @@ Lines = fileHeader.readlines()
 #print(Lines)
 for line in Lines:
     #print(line)
-    line = line[:-1]
+    line = line.strip()
     headerCol.append(line)
     headerValue.append('-1')
 fileHeader.close()
@@ -60,10 +60,9 @@ if int(count) == 0:
     Lines = fileHeader.readlines()
     row = ''
     for line in Lines:
-        line = line[:-1]
-        row = row + str(line) + ','
-    row = row[:-1] + '\n'
-    file_total_output.write(row)
+        line = line.strip()
+        row += line + ','
+    file_total_output.write(row.rstrip(',') + '\n')
     
 
 LinesTotal = file_total_input.readlines()
@@ -172,10 +171,9 @@ file_luster_input.close()
 
 row = ''
 for value in headerValue:
-    row = row + value + ',' 
+    row += value + ','
+file_total_output.write(row.rstrip(',') + '\n')
 
-row = row[:-1] + '\n'
-file_total_output.write(row)
 
 count = int(count) + 1
 file_count = open(input_dir+'/count.txt','w')
