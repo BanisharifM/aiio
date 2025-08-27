@@ -100,10 +100,12 @@ for line in LinesTotal:
     if line.startswith('# run time'):
         runtime = str((line.partition("# run time: ")[2])[:-1])
         headerValue[headerCol.index('runtime')] = str(runtime)
-    if line.startswith(('total')):
-        total = str((line.partition(": ")[2])[:-1])
-        heading = str(line.partition(": ")[0])
-        headerValue[headerCol.index(heading)] = str(total)
+    if line.startswith('total'):
+        heading, _, value = line.partition(': ')
+        heading = heading.strip()
+        value = value.strip()
+        if heading in headerCol:
+            headerValue[headerCol.index(heading)] = value
         # if not any(x in heading for x in headList):
         #     heading = heading + "\n"
         #     file5.write(heading)
@@ -127,7 +129,9 @@ for line in LinesPerf:
     if line.startswith(('# agg_perf_by_slowest')):
             total = str((line.partition(": ")[2])[:-1])
             perf=str(total.partition(" # ")[0])
-            headerValue[headerCol.index(perf_headList[perf_headList_index])] = str(perf)
+            col = perf_headList[perf_headList_index]
+            if col in headerCol:
+                headerValue[headerCol.index(col)] = str(perf)
 file_perf_input.close()
 
 ##
