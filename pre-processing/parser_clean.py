@@ -40,17 +40,24 @@ def parse_darshan_file(darshan_file, temp_dir):
     cmd = f"darshan-parser --perf {darshan_file} > {perf_file} 2>/dev/null"
     subprocess.call(cmd, shell=True)
     
+    current_module = None
     with open(perf_file, 'r') as f:
         for line in f:
-            # Look for POSIX performance data
+            # Track which module we're in
             if '# POSIX module data' in line:
-                perf_module = 'POSIX'
-            elif '# agg_perf_by_slowest' in line:
-                if 'POSIX' in locals() and perf_module == 'POSIX':
-                    parts = line.split(':')
-                    if len(parts) > 1:
-                        perf_value = parts[1].strip().split('#')[0].strip()
-                        counters['POSIX_PERF_MIBS'] = perf_value
+                current_module = 'POSIX'
+            elif '# MPI-IO module data' in line:
+                current_module = 'MPIIO'
+            elif '# STDIO module data' in line:
+                current_module = 'STDIO'
+            # Extract performance data
+            elif 'agg_perf_by_slowest:' in line and current_module == 'POSIX':
+                parts = line.split(':')
+                if len(parts) > 1:
+                    perf_str = parts[1].strip()
+                    # Extract just the number (before "# MiB/s")
+                    perf_value = perf_str.split('#')[0].strip()
+                    counters['POSIX_PERF_MIBS'] = perf_value
     
     # Parse Lustre data
     lustre_file = os.path.join(temp_dir, 'parsed_lustre.txt')
@@ -83,7 +90,7 @@ def parse_darshan_file(darshan_file, temp_dir):
     
     return counters
 
-def normalize_value(value, is_tag=False):
+def normalize_value(value):
     """Apply log10(x+1) normalization"""
     try:
         numeric_val = float(value)
@@ -92,7 +99,7 @@ def normalize_value(value, is_tag=False):
     except (ValueError, TypeError):
         return 0.0
 
-def process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir):
+def process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir, log_missing=True):
     """Process all Darshan logs and create output CSV matching sample format"""
     
     # Get headers from sample file
@@ -114,13 +121,16 @@ def process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir):
     
     print(f"Found {len(darshan_files)} Darshan files to process")
     
+    # Track global missing counter statistics
+    global_missing_counters = {}
+    
     # Process each file and write to CSV
     with open(output_csv, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(headers)  # Write header
         
         for idx, darshan_file in enumerate(darshan_files):
-            print(f"Processing {idx+1}/{len(darshan_files)}: {os.path.basename(darshan_file)}")
+            print(f"\nProcessing {idx+1}/{len(darshan_files)}: {os.path.basename(darshan_file)}")
             
             # Parse the Darshan file
             counters = parse_darshan_file(darshan_file, temp_dir)
@@ -128,27 +138,62 @@ def process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir):
                 print(f"  Skipping due to parse error")
                 continue
             
+            # Track missing counters for this file
+            missing_counters = []
+            found_counters = []
+            
             # Create row matching sample headers
             row = []
             for header in headers:
                 if header == 'tag':
-                    # tag is derived from POSIX_PERF_MIBS
+                    # tag is derived from POSIX_PERF_MIBS (normalized)
                     value = counters.get('POSIX_PERF_MIBS', '0')
-                    row.append(normalize_value(value, is_tag=True))
+                    if 'POSIX_PERF_MIBS' not in counters:
+                        missing_counters.append('POSIX_PERF_MIBS (for tag)')
+                    else:
+                        found_counters.append(f"tag={normalize_value(value):.4f}")
+                    row.append(normalize_value(value))
                 elif header in counters:
                     # Direct match
+                    found_counters.append(f"{header}={normalize_value(counters[header]):.4f}")
                     row.append(normalize_value(counters[header]))
                 elif f"total_{header}" in counters:
                     # Try with total_ prefix
+                    found_counters.append(f"{header}={normalize_value(counters[f'total_{header}']):.4f}")
                     row.append(normalize_value(counters[f"total_{header}"]))
                 else:
                     # Missing value, use 0
+                    missing_counters.append(header)
                     row.append(0.0)
+                    
+                    # Track globally
+                    if header not in global_missing_counters:
+                        global_missing_counters[header] = 0
+                    global_missing_counters[header] += 1
             
             writer.writerow(row)
+            
+            # Log detailed information if requested
+            if log_missing and missing_counters:
+                print(f"  Missing {len(missing_counters)} counters (set to 0):")
+                for counter in missing_counters[:10]:  # Show first 10
+                    print(f"    - {counter}")
+                if len(missing_counters) > 10:
+                    print(f"    ... and {len(missing_counters)-10} more")
+            
+            print(f"  Found {len(found_counters)} counters successfully")
             print(f"  Processed successfully")
     
+    print(f"\n{'='*60}")
     print(f"Output written to {output_csv}")
+    
+    # Summary of missing counters across all files
+    if global_missing_counters:
+        print(f"\nGlobal Missing Counter Summary:")
+        print(f"  (Number shows how many files were missing each counter)")
+        sorted_missing = sorted(global_missing_counters.items(), key=lambda x: x[1], reverse=True)
+        for counter, count in sorted_missing[:20]:  # Show top 20
+            print(f"    {counter}: missing in {count}/{len(darshan_files)} files")
     
     # Clean up temp directory
     subprocess.call(f"rm -rf {temp_dir}", shell=True)
@@ -164,7 +209,7 @@ def main():
     sample_csv = sys.argv[3]
     temp_dir = sys.argv[4] if len(sys.argv) > 4 else f"/tmp/darshan_parse_{os.getpid()}"
     
-    process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir)
+    process_darshan_logs(input_dir, output_csv, sample_csv, temp_dir, log_missing=True)
 
 if __name__ == "__main__":
     main()

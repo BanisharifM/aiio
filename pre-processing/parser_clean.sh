@@ -21,7 +21,7 @@ fi
 AIIO_DIR="/work/hdd/bdau/mbanisharifdehkordi/aiio"
 INPUT_DIR="$AIIO_DIR/darshan-logs-for-gnn4io"
 OUTPUT_CSV="$AIIO_DIR/parsed-logs-for-gnn4io/output_clean.csv"
-SAMPLE_CSV="$AIIO_DIR/sample_train_100.csv"  # Adjust path to your sample file
+SAMPLE_CSV="$AIIO_DIR/parsed-logs-for-gnn4io/sample_train_100.csv"
 TEMP_DIR="/tmp/darshan_parse_${SLURM_JOB_ID}"
 
 # Create output directory if needed
@@ -44,7 +44,7 @@ echo "Total files to process: $TOTAL_FILES"
 echo "=========================================="
 
 # Run the parser
-python parser_clean.py "$INPUT_DIR" "$OUTPUT_CSV" "$SAMPLE_CSV" "$TEMP_DIR"
+python pre-processing/parser_clean.py "$INPUT_DIR" "$OUTPUT_CSV" "$SAMPLE_CSV" "$TEMP_DIR"=
 PARSER_EXIT=$?
 
 echo "=========================================="
